@@ -3,7 +3,7 @@ import subprocess
 import json
 import time
 from datetime import datetime, timezone
-import itertools
+import pathlib
 import multiprocessing
 
 def find_containerID():
@@ -33,14 +33,17 @@ def network_query(container_ids):
 
       #output_file = f"system_logs/{id}/{id}_{timestamp}.json"
 
-    query = f"SELECT basic.pid, stats.name, stats.network_rx_bytes, stats.network_tx_bytes, " \
+    query = f"SELECT basic.pid, stats.id, stats.name, stats.network_rx_bytes, stats.network_tx_bytes, " \
       + f"stats.memory_usage, stats.memory_max_usage, (((stats.cpu_total_usage - stats.pre_cpu_total_usage)*1.0 / " \
       + f"(stats.system_cpu_usage-stats.pre_system_cpu_usage)*1.0) * online_cpus)*100 AS cpu_percent_used " \
       + f"FROM docker_container_stats AS stats JOIN " \
       + f"docker_containers AS basic ON stats.id = basic.id WHERE basic.id='{container_ids}'"
     result = subprocess.run(["osqueryi", '--json', query], check=True, capture_output=True, text=True)
+    #print(type(result))
     #time.sleep(2)
     #result = multiprocessing.Process(target="osqueryi")
+    #result_file = json.loads(result.stdout)
+    #print(result_file[0]["id"])
     return result
     #result_file = json.loads(result.stdout)
     #with open(output_file, 'w') as f:
@@ -54,17 +57,25 @@ def network_query(container_ids):
     print(F"\nTerminated safely: {e}\n")
 
 def write_file(result):
-      #print("\nwrite_file\n")
-      container_ids = find_containerID()
-      create_folders(container_ids)
-      for id in container_ids:
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4] 
-        output_file = f"system_logs/{id}/{id}_{timestamp}.json"
-        result_file = json.loads(result.stdout)
+  #print(result)
+  #print("\nwrite_file\n")
+  container_ids = find_containerID()
+  create_folders(container_ids)
+  #for id in result:
+  result_file = json.loads(result.stdout)
+  for id in result_file:
+    print(id["id"])
+    if id["id"] in f"system_logs/{id["id"]}":
+      timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
+      output_file = f"system_logs/{id["id"]}/{id["id"]}_{timestamp}.json"
+  #for id in container_ids: 
+    #output_file = f"system_logs/{id}/{id}_{timestamp}.json"
+    #result_file = json.loads(result.stdout)
+      if not os.path.exists(f"system_logs/{id["id"]}/{id["id"]}_{timestamp}.json"):
         with open(output_file, 'w') as f:
-          #for id in container_ids:
-          if id in f"system_logs/{id}":
-            json.dump(result_file, f, indent=4)
+      #for id in container_ids:
+        #if id in f"system_logs/{id}":
+          json.dump(result_file, f, indent=4)
 
 
 def parallel_work(ids):
@@ -72,13 +83,17 @@ def parallel_work(ids):
   #container_ids = find_containerID(ids)
   #query = network_query(container_ids)
   workers = os.cpu_count()
+  #create_folders(ids)
   print(f"\nworkers: {workers}\n")
   with multiprocessing.Pool(processes=workers) as mp:
     while True:
       try:
         result = mp.map(network_query, ids)
+        #print(type(result[0]))
+        #print(type(result[1]))
         for cont_id in result:
           #print("\nparallel_work\n")
+          #print(cont_id)
           write_file(cont_id)
         time.sleep(2)
       except KeyboardInterrupt:
