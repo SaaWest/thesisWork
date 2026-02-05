@@ -57,25 +57,28 @@ def network_query(container_ids):
     print(F"\nTerminated safely: {e}\n")
 
 def write_file(result):
-  #print(result)
-  #print("\nwrite_file\n")
-  container_ids = find_containerID()
-  create_folders(container_ids)
-  #for id in result:
+  #container_ids = find_containerID()
+  #create_folders(container_ids)
   result_file = json.loads(result.stdout)
-  for id in result_file:
-    print(id["id"])
-    if id["id"] in f"system_logs/{id["id"]}":
-      timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
-      output_file = f"system_logs/{id["id"]}/{id["id"]}_{timestamp}.json"
-  #for id in container_ids: 
-    #output_file = f"system_logs/{id}/{id}_{timestamp}.json"
-    #result_file = json.loads(result.stdout)
-      if not os.path.exists(f"system_logs/{id["id"]}/{id["id"]}_{timestamp}.json"):
-        with open(output_file, 'w') as f:
-      #for id in container_ids:
-        #if id in f"system_logs/{id}":
-          json.dump(result_file, f, indent=4)
+  #print(result)
+  #print("\n")
+  #print(result_file)
+  id = result_file[0]["id"]
+  timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
+  os.makedirs(f"system_logs/{id}", exist_ok=True)
+  output_file = f"system_logs/{id}/{id}_{timestamp}"
+  with open(output_file, 'w') as f:
+    json.dump(result_file, f, indent=4)
+
+  #result_file = json.loads(result.stdout)
+  #for id in result_file:
+    #print(id["id"])
+    #if id["id"] in f"system_logs/{id["id"]}":
+      #timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
+      #output_file = f"system_logs/{id["id"]}/{id["id"]}_{timestamp}.json"
+      #if not os.path.exists(f"system_logs/{id["id"]}/{id["id"]}_{timestamp}.json"):
+        #with open(output_file, 'w') as f:
+          #json.dump(result_file, f, indent=4)
 
 
 def parallel_work(ids):
