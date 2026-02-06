@@ -34,8 +34,8 @@ def network_query(container_ids):
       #output_file = f"system_logs/{id}/{id}_{timestamp}.json"
 
     query = f"SELECT basic.pid, stats.id, stats.name, stats.network_rx_bytes, stats.network_tx_bytes, " \
-      + f"stats.memory_usage, stats.memory_max_usage, (((stats.cpu_total_usage - stats.pre_cpu_total_usage)*1.0 / " \
-      + f"(stats.system_cpu_usage-stats.pre_system_cpu_usage)*1.0) * online_cpus)*100 AS cpu_percent_used " \
+      + f"stats.memory_usage, stats.disk_read, stats.disk_write, (((stats.cpu_total_usage - stats.pre_cpu_total_usage)*1.0 / " \
+      + f"(stats.system_cpu_usage - stats.pre_system_cpu_usage)*1.0) * online_cpus)*100 AS cpu_percent_used " \
       + f"FROM docker_container_stats AS stats JOIN " \
       + f"docker_containers AS basic ON stats.id = basic.id WHERE basic.id='{container_ids}'"
     result = subprocess.run(["osqueryi", '--json', query], check=True, capture_output=True, text=True)
@@ -57,15 +57,12 @@ def network_query(container_ids):
     print(F"\nTerminated safely: {e}\n")
 
 def write_file(result):
-  #container_ids = find_containerID()
-  #create_folders(container_ids)
   result_file = json.loads(result.stdout)
-  #print(result)
-  #print("\n")
-  #print(result_file)
+
   id = result_file[0]["id"]
   timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
   os.makedirs(f"system_logs/{id}", exist_ok=True)
+  #create_folders(id)
   output_file = f"system_logs/{id}/{id}_{timestamp}"
   with open(output_file, 'w') as f:
     json.dump(result_file, f, indent=4)
