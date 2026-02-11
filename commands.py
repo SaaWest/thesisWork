@@ -5,6 +5,10 @@ import time
 from datetime import datetime, timezone
 import pathlib
 import multiprocessing
+import psutil
+
+#pid = os.getpid()
+#python_process = psutil.Process(pid)
 
 def find_containerID():
   
@@ -56,26 +60,31 @@ def network_query(container_ids):
   except Exception as e:
     print(F"\nTerminated safely: {e}\n")
 
+def unpack_list(data):
+  for item in data:
+    if isinstance(item, dict):
+      return item
+    
 def write_file(result):
   result_file = json.loads(result.stdout)
-
-  id = result_file[0]["id"]
+  #print(type(result_file))
   timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
-  os.makedirs(f"system_logs/{id}", exist_ok=True)
+  result_file[0]["time"] = timestamp
+  unpacked = unpack_list(result_file)
+  container_id = result_file[0]["id"]
+  #timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
+  os.makedirs(f"system_logs/{result_file[0]["name"]}", exist_ok=True)
   #create_folders(id)
-  output_file = f"system_logs/{id}/{id}_{timestamp}"
-  with open(output_file, 'w') as f:
-    json.dump(result_file, f, indent=4)
-
-  #result_file = json.loads(result.stdout)
-  #for id in result_file:
-    #print(id["id"])
-    #if id["id"] in f"system_logs/{id["id"]}":
-      #timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
-      #output_file = f"system_logs/{id["id"]}/{id["id"]}_{timestamp}.json"
-      #if not os.path.exists(f"system_logs/{id["id"]}/{id["id"]}_{timestamp}.json"):
-        #with open(output_file, 'w') as f:
-          #json.dump(result_file, f, indent=4)
+  output_file = f"system_logs/{result_file[0]["name"]}/{container_id}.jsonl"
+  if not os.path.exists(output_file):
+    with open(output_file, 'w') as f:
+      json.dump(unpacked, f, indent=4)
+      f.write("\n")
+  else:
+    if result_file is not None:
+      with open(output_file, "a") as f:
+        json.dump(unpacked, f, indent=4)
+        f.write("\n")
 
 
 def parallel_work(ids):
@@ -89,12 +98,11 @@ def parallel_work(ids):
     while True:
       try:
         result = mp.map(network_query, ids)
-        #print(type(result[0]))
-        #print(type(result[1]))
         for cont_id in result:
-          #print("\nparallel_work\n")
-          #print(cont_id)
           write_file(cont_id)
+          #memory_use_mib = python_process.memory_info()[0] / (1024 * 1024)
+          #cpu_percent = python_process.cpu_percent(interval=1)
+          #print(f"Memory Use: {memory_use_mib:.2f} MiB | CPU Percent: {cpu_percent}%")
         time.sleep(2)
       except KeyboardInterrupt:
         print("\nTerminated safely\n")
