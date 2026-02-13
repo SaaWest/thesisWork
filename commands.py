@@ -66,6 +66,7 @@ def unpack_list(data):
       return item
     
 def write_file(result):
+  "maybe append all entries to one file"
   result_file = json.loads(result.stdout)
   #print(type(result_file))
   timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
@@ -76,15 +77,15 @@ def write_file(result):
   os.makedirs(f"system_logs/{result_file[0]["name"]}", exist_ok=True)
   #create_folders(id)
   output_file = f"system_logs/{result_file[0]["name"]}/{container_id}.jsonl"
-  if not os.path.exists(output_file):
-    with open(output_file, 'w') as f:
-      json.dump(unpacked, f, indent=4)
-      f.write("\n")
-  else:
-    if result_file is not None:
-      with open(output_file, "a") as f:
-        json.dump(unpacked, f, indent=4)
-        f.write("\n")
+  #if not os.path.exists(output_file):
+    #with open(output_file, 'w') as f:
+      #json.dump(unpacked, f, indent=4)
+      #f.write("\n")
+  #else:
+  #if result_file is not None:
+  with open(output_file, "a") as f:
+    json.dump(unpacked, f)
+    f.write("\n")
 
 
 def parallel_work(ids):
