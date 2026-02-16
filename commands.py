@@ -66,7 +66,7 @@ def unpack_list(data):
       return item
     
 def write_file(result):
-  "maybe append all entries to one file"
+  '''maybe append all entries to one file'''
   result_file = json.loads(result.stdout)
   #print(type(result_file))
   timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
