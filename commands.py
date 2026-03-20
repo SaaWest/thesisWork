@@ -5,16 +5,18 @@ import time
 from datetime import datetime, timezone
 import pathlib
 import multiprocessing
+from multiprocessing import Manager
 import psutil
 
 #pid = os.getpid()
 #python_process = psutil.Process(pid)
-# git clone https://github.com/vulhub/vulhub.git
+
 def find_containerID():
   
-  result = subprocess.check_output("docker ps -a | awk 'NR > 1 {print $1}'", shell=True).decode().strip()
+  #result = subprocess.check_output("docker ps -a | awk 'NR > 1 {print $1}'", shell=True).decode().strip()
+  result = subprocess.check_output("docker ps -q", shell=True).decode().strip()
   ids = [i for i in result.split('\n')]
-  #print(repr(ids))
+  #print(ids)
   return ids
 
 def create_folders(ids):
@@ -23,68 +25,108 @@ def create_folders(ids):
     #if not os.path.exists("system_logs/{id}"):
     os.makedirs(f"system_logs/{id}", exist_ok=True)
 
-def network_query(container_ids):
+def resource_query(container_ids):
   
   #container_ids = find_containerID()
   #create_folders(container_ids)
-  #print("\nnetwork_query\n")
-  #id_cycle_list = itertools.cycle(container_ids)
+  
+    query = f"SELECT process.id, process.name, SUM(process.cpu) AS cpu_percent, "\
+      + f"SUM(process.mem) AS mem_percent, SUM(p.disk_bytes_read) AS disk_read, " \
+      + f"SUM(p.disk_bytes_written) AS disk_write "\
+      + f"FROM docker_container_processes AS process "\
+      + f"JOIN processes AS p ON p.pid = process.pid "\
+      + f"WHERE process.id = '{container_ids}' "\
+      + f"GROUP BY process.id;"
 
-  try:
-    #while True:
-    #for id in container_ids:
-      #timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4] 
-
-      #output_file = f"system_logs/{id}/{id}_{timestamp}.json"
-
-    query = f"SELECT basic.pid, stats.id, stats.name, stats.network_rx_bytes, stats.network_tx_bytes, " \
-      + f"stats.memory_usage, stats.disk_read, stats.disk_write, (((stats.cpu_total_usage - stats.pre_cpu_total_usage)*1.0 / " \
-      + f"(stats.system_cpu_usage - stats.pre_system_cpu_usage)*1.0) * online_cpus)*100 AS cpu_percent_used " \
-      + f"FROM docker_container_stats AS stats JOIN " \
-      + f"docker_containers AS basic ON stats.id = basic.id WHERE basic.id='{container_ids}'"
+    #query = f"SELECT basic.pid, stats.id, stats.name, stats.network_rx_bytes, stats.network_tx_bytes, " \
+      #+ f"stats.memory_usage, stats.disk_read, stats.disk_write, (((stats.cpu_total_usage - stats.pre_cpu_total_usage)*1.0 / " \
+      #+ f"(stats.system_cpu_usage - stats.pre_system_cpu_usage)*1.0) * online_cpus)*100 AS cpu_percent_used " \
+      #+ f"FROM docker_container_stats AS stats JOIN " \
+      #+ f"docker_containers AS basic ON stats.id = basic.id WHERE basic.id='{container_ids}'"
     result = subprocess.run(["osqueryi", '--json', query], check=True, capture_output=True, text=True)
-    #print(type(result))
-    #time.sleep(2)
-    #result = multiprocessing.Process(target="osqueryi")
-    #result_file = json.loads(result.stdout)
-    #print(result_file[0]["id"])
-    return result
-    #result_file = json.loads(result.stdout)
-    #with open(output_file, 'w') as f:
-      #for id in container_ids:
-        #if id in f"system_logs/{id}":
-          #json.dump(result_file, f, indent=4)
+    results = json.loads(result.stdout)
+    #print(results[0])
+    #print("\n")
+    return results[0]
 
-      #time.sleep(10)
-
+def network_query(container_id):
+  #for cid in container_id:
+    #rc_bytes = subprocess.run(f"docker exec {cid} cat /proc/net/dev", shell=True, capture_output= True, text=True)
+    #print()
+    #for line in rc_bytes.stdout.strip():
+      #print(line)
+  try:
+    net_rx = f"docker exec {container_id} cat /sys/class/net/eth0/statistics/rx_bytes"
+    rx = int(subprocess.check_output(net_rx, shell=True))
+    net_tx = f"docker exec {container_id} cat /sys/class/net/eth0/statistics/tx_bytes"
+    tx = int(subprocess.check_output(net_tx, shell=True))
+    return {"network_rx_bytes": rx, "network_tx_bytes": tx}
   except Exception as e:
-    print(F"\nTerminated safely: {e}\n")
+    return {"network_rx_bytes": 0, "network_tx_bytes": 0}
+    
+def network_delta(container_id, previous_net):
+    current = network_query(container_id)
+    now = time.time()
 
-def unpack_list(data):
-  for item in data:
-    if isinstance(item, dict):
-      return item
+    rx = current["network_rx_bytes"]
+    tx = current["network_tx_bytes"]
+
+    if container_id in previous_net:
+        prev = previous_net[container_id]
+
+        delta_rx = rx - prev["rx"]
+        delta_tx = tx - prev["tx"]
+        delta_time = now - prev["time"]
+        if delta_rx < 0: delta_rx = 0
+        if delta_tx < 0: delta_tx = 0
+
+        rx_rate = delta_rx / delta_time if delta_time > 0 else 0
+        tx_rate = delta_tx / delta_time if delta_time > 0 else 0
+    else:
+        delta_rx = 0 
+        delta_tx = 0
+        rx_rate = 0 
+        tx_rate = 0 
+    previous_net[container_id] = {
+        "rx": rx,
+        "tx": tx,
+        "time": now
+    }
+
+    return {
+        "network_rx_bytes": rx,
+        "network_tx_bytes": tx,
+        "delta_rx_bytes": delta_rx,
+        "delta_tx_bytes": delta_tx,
+        "rx_rate": rx_rate,
+        "tx_rate": tx_rate
+    }
+
+def all_tools(container_id, prev_net):
+  res = resource_query(container_id)
+  #net = network_delta(container_id)
+  net = network_delta(container_id, prev_net)
+  res.update(net)
+  write_file(res)
+
+#def unpack_list(data):
+  #for item in data:
+    #if isinstance(item, dict):
+      #return item
     
 def write_file(result):
   '''maybe append all entries to one file'''
-  result_file = json.loads(result.stdout)
-  #print(type(result_file))
+
   timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
-  result_file[0]["time"] = timestamp
-  unpacked = unpack_list(result_file)
-  container_id = result_file[0]["id"]
-  #timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")[:-4]
-  os.makedirs(f"system_logs/{result_file[0]["name"]}", exist_ok=True)
-  #create_folders(id)
-  output_file = f"system_logs/{result_file[0]["name"]}/{container_id}.jsonl"
-  #if not os.path.exists(output_file):
-    #with open(output_file, 'w') as f:
-      #json.dump(unpacked, f, indent=4)
-      #f.write("\n")
-  #else:
-  #if result_file is not None:
+  result["time"] = timestamp
+
+  container_id = result["id"]
+
+  os.makedirs(f"system_logs/{result['name']}", exist_ok=True)
+
+  output_file = f"system_logs/{result['name']}/{container_id}.jsonl"
   with open(output_file, "a") as f:
-    json.dump(unpacked, f)
+    json.dump(result, f)
     f.write("\n")
 
 
@@ -92,26 +134,28 @@ def parallel_work(ids):
   
   #container_ids = find_containerID(ids)
   #query = network_query(container_ids)
-  workers = os.cpu_count()
+  workers = min(len(ids), os.cpu_count())
   #create_folders(ids)
   print(f"\nworkers: {workers}\n")
-  with multiprocessing.Pool(processes=workers) as mp:
-    while True:
-      try:
-        result = mp.map(network_query, ids)
-        for cont_id in result:
-          write_file(cont_id)
-          #memory_use_mib = python_process.memory_info()[0] / (1024 * 1024)
-          #cpu_percent = python_process.cpu_percent(interval=1)
-          #print(f"Memory Use: {memory_use_mib:.2f} MiB | CPU Percent: {cpu_percent}%")
-        time.sleep(2)
-      except KeyboardInterrupt:
-        print("\nTerminated safely\n")
-        mp.terminate()
-        mp.join()
+  with Manager() as manager:
+    previous_net = manager.dict()
+    with multiprocessing.Pool(workers) as pool:
+        try:
+          while True:
+            #pool.map(all_tools, ids)
+            pool.starmap(all_tools, [(cid, previous_net) for cid in ids])
+            time.sleep(2)
+        except KeyboardInterrupt:
+            print("Terminated all queries")
+            pool.terminate()
+            pool.join()
 
 
 if __name__ == "__main__":
-  container_ids = find_containerID()
+  cids = find_containerID()
+  parallel_work(cids)
+  #print(network_query)
+  #container_ids = find_containerID()
+  #print(network_query(container_ids))
   #create_folders(container_ids)
-  parallel_work(container_ids)
+  #parallel_work(container_ids)

@@ -2,7 +2,7 @@ import pathlib as path
 from dataclasses import dataclass
 import json
 from collections import defaultdict, deque
-from datetime import datetime
+from datetime import datetime, timedelta
 #from ingestion_engine import *
 import statistics
 #from delete_ingestion import * # <- change this import statement
@@ -91,11 +91,11 @@ class Docker_Self():
 
     def active_container_resources(self):
         return {
-            "cpu_percent_used": deque(),
+            "cpu_percent": deque(),
             "disk_read": deque(), 
             "disk_write": deque(),
             "id": deque(), #container_id
-            "memory_usage": deque(),
+            "mem_percent": deque(),
             "name": deque(),
             "network_rx_bytes": deque(),
             "network_tx_bytes": deque(),
@@ -107,11 +107,11 @@ class Docker_Self():
 
     def store_container_resources(self):
         return {
-            "cpu_percent_used": deque(),
+            "cpu_percent": deque(),
             "disk_read": deque(), 
             "disk_write": deque(),
             "id": deque(), #container_id
-            "memory_usage": deque(),
+            "mem_percent": deque(),
             "name": deque(),
             "network_rx_bytes": deque(),
             "network_tx_bytes": deque(),
@@ -121,35 +121,35 @@ class Docker_Self():
 
     def self_cpu_memoryGB(self):
         for id in self.self_containers.keys():
-            cpu = self.self_containers[id]['cpu_percent_used']
-            mem = self.self_containers[id]['memory_usage']
+            cpu = self.self_containers[id]['cpu_percent']
+            mem = self.self_containers[id]['mem_percent']
             time = self.self_containers[id]['time']
             name = self.self_containers[id]['name']
             for t, c, m, n in zip(time, cpu, mem, name):
                 yield {
                     "timestamp": t,
                     "name": n,
-                    "cpu_memGB_ratio": (float(c) / 100) / (float(m) * 0.001048576) if float(m) > 0 else 0
+                    "cpu_mem_ratio": (float(c) / 100) / (float(m) * 0.001048576) if float(m) > 0 else 0
                 }
 
     def non_self_cpuMemGB(self):
         for id in self.nonSelf_containers.keys():
-            cpu = self.nonSelf_containers[id]['cpu_percent_used']
-            mem = self.nonSelf_containers[id]['memory_usage']
+            cpu = self.nonSelf_containers[id]['cpu_percent']
+            mem = self.nonSelf_containers[id]['mem_percent']
             time = self.nonSelf_containers[id]['time']
             name = self.nonSelf_containers[id]['name']
             for t, c, m, n in zip(time, cpu, mem, name):
                 yield {
                     "timestamp": t,
                     "name": n,
-                    "cpu_memGB_ratio": (float(c) / 100) / (float(m) * 0.001048576) if float(m) > 0 else 0
+                    "cpu_mem_ratio": (float(c) / 100) / (float(m) * 0.001048576) if float(m) > 0 else 0
                 } 
 
     def all_nonSelf_ratios(self):
         #data = []
         for id in self.nonSelf_containers.keys(): # iterate over list live containers
-            cpu = self.nonSelf_containers[id]['cpu_percent_used']
-            mem = self.nonSelf_containers[id]['memory_usage']
+            cpu = self.nonSelf_containers[id]['cpu_percent']
+            mem = self.nonSelf_containers[id]['mem_percent']
             disk_read = self.nonSelf_containers[id]['disk_read']
             disk_write = self.nonSelf_containers[id]['disk_write']        
             network_rec = self.nonSelf_containers[id]['network_rx_bytes']
@@ -160,7 +160,7 @@ class Docker_Self():
                 yield {
                     "timestamp": t,
                     "name": n,
-                    "cpu_memGB_ratio": (float(c) / 100) / (float(m) * 0.001048576) if float(m) > 0 else 0,
+                    "cpu_mem_ratio": (float(c) / 100) / (float(m) * 0.001048576) if float(m) > 0 else 0,
                     "cpu_readWriteMB_ratio": ((float(dr) + float(dw)) / 1048576.0) / (float(c) / 100),
                     "cpu_networkMB_ratio": ((float(rec) + float(trn)) / 1048576.0) / (float(c) / 100),
                     "net_memMB_ratio": ((float(rec) + float(trn)) / 1048576.0) / (float(m) * 1.048576),
@@ -170,8 +170,8 @@ class Docker_Self():
         #return data
     def all_Self_ratios(self):
         for id in self.self_containers.keys(): # iterate over list live containers
-            cpu = self.self_containers[id]['cpu_percent_used']
-            mem = self.self_containers[id]['memory_usage']
+            cpu = self.self_containers[id]['cpu_percent']
+            mem = self.self_containers[id]['mem_percent']
             disk_read = self.self_containers[id]['disk_read']
             disk_write = self.self_containers[id]['disk_write']        
             network_rec = self.self_containers[id]['network_rx_bytes']
@@ -183,15 +183,15 @@ class Docker_Self():
                 yield {
                     "timestamp": t,
                     "name": n,
-                    "cpu_memGB_ratio": (float(c) / 100) / (float(m) * 0.001048576) if float(m) > 0 else 0,
+                    "cpu_mem_ratio": (float(c)) / (float(m)) if float(m) > 0 else 0,
                     "cpu_readWriteMB_ratio": ((float(dr) + float(dw)) / 1048576.0) / (float(c) / 100) if float(c) > 0 else 0,
                     "cpu_networkMB_ratio": ((float(rec) + float(trn)) / 1048576.0) / (float(c) / 100) if float(c) > 0 else 0,
-                    "net_memMB_ratio": ((float(rec) + float(trn)) / 1048576.0) / (float(m) * 1.048576) if float(m) > 0 else 0,
+                    "net_memMB_ratio": ((float(rec) + float(trn)) / 1048576.0) / (float(m) / 100 ) if float(m) > 0 else 0,
                     "disk_netMB_ratio": ((float(dr) + float(dw)) / 1048576.0) / ((float(rec) + float(trn)) / 1048576.0),
-                    "disk_memMB_ratio": ((float(dr) + float(dw)) / 1048576.0) / (float(m) * 1.048576) if float(m) > 0 else 0,
+                    "disk_memMB_ratio": ((float(dr) + float(dw)) / 1048576.0) / (float(m) / 100) if float(m) > 0 else 0,
                 }
 
-    def exponential_moving_average(self,values, alpha=0.3):
+    def exponential_moving_average(self, values, alpha=0.3):
         ema = []
         for i, v in enumerate(values):
             if i == 0:
@@ -199,6 +199,14 @@ class Docker_Self():
             else:
                 ema.append(alpha * v + (1 - alpha) * ema[i-1])
         return ema
+    
+    def consistency(self, zscore, threshold=.7):
+        pos = sum(1 for z in zscore if z > 0)
+        neg = sum(1 for z in zscore if z < 0)
+        dom = max(pos, neg)
+        #if len(zscore) == 0:
+            #return False
+        return dom / len(zscore) >= threshold if len(zscore) > 0 else 0
                     
     def data_init(self):
         self.process_baseline()
@@ -208,7 +216,8 @@ class Docker_Self():
     # For cpu and memory ratio.
     def measure_alert(self):
         alerted_anomalies = set()
-
+        containerState = defaultdict(lambda: "Normal")
+        cooldown = {}
         while True:
             ds, ig = self.data_init()
             #baseline_cpuMem = {}
@@ -216,13 +225,13 @@ class Docker_Self():
             ig_ratio_dict = defaultdict(list)
             anomalies = defaultdict(list)
             resource_groups = {
-                "cpu_mem": ["cpu_memGB_ratio", "net_memMB_ratio"],
-                "cpu_network": ["cpu_memGB_ratio", "cpu_networkMB_ratio"],
+                "cpu_mem": ["cpu_mem_ratio", "net_memMB_ratio"],
+                "cpu_network": ["cpu_mem_ratio", "cpu_networkMB_ratio"],
                 "disk_network": ["disk_netMB_ratio", "disk_memMB_ratio"]
                 }
             for dicts in ds.all_Self_ratios():
                 name = dicts["name"]
-                cpu_memRatio = dicts['cpu_memGB_ratio']
+                cpu_memRatio = dicts['cpu_mem_ratio']
                 cpu_RW_ratio = dicts['cpu_readWriteMB_ratio']
                 cpu_NetRatio = dicts['cpu_networkMB_ratio']
                 net_memRatio = dicts["net_memMB_ratio"]
@@ -230,7 +239,7 @@ class Docker_Self():
                 disk_memRatio = dicts['disk_memMB_ratio']
                 timestamp = dicts['timestamp']
                 #ds_ratio_dict[name].append((cpu_memRatio, cpu_RW_ratio, cpu_NetRatio, net_memRatio, disk_netRatio, disk_memRatio, timestamp))
-                ds_ratio_dict[(name, "cpu_memGB_ratio")].append((cpu_memRatio, timestamp))
+                ds_ratio_dict[(name, "cpu_mem_ratio")].append((cpu_memRatio, timestamp))
                 ds_ratio_dict[(name, "cpu_readWriteMB_ratio")].append((cpu_RW_ratio, timestamp))
                 ds_ratio_dict[(name, "cpu_networkMB_ratio")].append((cpu_NetRatio, timestamp))
                 ds_ratio_dict[(name, "net_memMB_ratio")].append((net_memRatio, timestamp))
@@ -239,10 +248,10 @@ class Docker_Self():
             for dicts in ig.all_nonSelf_ratios():
                 #print("in dicts 2")
                 #name = dicts['name']
-                #cpu_memRatio = dicts['cpu_memGB_ratio']
+                #cpu_memRatio = dicts['cpu_mem_ratio']
                 #timestamp = dicts['timestamp']
                 name = dicts["name"]
-                cpu_memRatio = dicts['cpu_memGB_ratio']
+                cpu_memRatio = dicts['cpu_mem_ratio']
                 cpu_RW_ratio = dicts['cpu_readWriteMB_ratio']
                 cpu_NetRatio = dicts['cpu_networkMB_ratio']
                 net_memRatio = dicts["net_memMB_ratio"]
@@ -250,7 +259,7 @@ class Docker_Self():
                 disk_memRatio = dicts['disk_memMB_ratio']
                 timestamp = dicts['timestamp']
                 #ig_ratio_dict[name].append((cpu_memRatio, cpu_RW_ratio, cpu_NetRatio, net_memRatio, disk_netRatio, disk_memRatio, timestamp))  
-                ig_ratio_dict[(name, "cpu_memGB_ratio")].append((cpu_memRatio, timestamp))
+                ig_ratio_dict[(name, "cpu_mem_ratio")].append((cpu_memRatio, timestamp))
                 ig_ratio_dict[(name, "cpu_readWriteMB_ratio")].append((cpu_RW_ratio, timestamp))
                 ig_ratio_dict[(name, "cpu_networkMB_ratio")].append((cpu_NetRatio, timestamp))
                 ig_ratio_dict[(name, "net_memMB_ratio")].append((net_memRatio, timestamp))
@@ -271,6 +280,8 @@ class Docker_Self():
 
                 mean = statistics.mean(ratios)
                 std_dev = statistics.stdev(ratios) if len(ratios) > 1 else 0
+                std_dev = max(std_dev, 1e-2)
+                print(f"Name: {name}, Metric: {metric}, Mean: {mean}, Sandard_dev: {std_dev}")
 
                 baseline[name][metric] = {
                     "mean": mean,
@@ -330,9 +341,23 @@ class Docker_Self():
                             grouped_anomalies[(container, group_name)].extend(common_times)
 
             for (container, group_name), common_times in grouped_anomalies.items():
+
                 if container in alerted_anomalies:
                     continue
-            
+                times = sorted(datetime.strptime(t, "%Y-%m-%d_%H:%M:%S.%f") for t in common_times)
+                timesList = []
+                for i in range(len(times)):
+                    count = 1
+                    for j in range(i+1, len(times)):
+                        if (times[j] - times[i]).total_seconds() <= 10:
+                            count += 1
+                        else:
+                            break
+                    if count >= 3:
+                        timesList.append(times[i])
+                if not timesList:
+                    continue
+
             # flatten all anomalies for this container
                 containerAnomalySet = set()
                 for ts in common_times:
@@ -340,21 +365,41 @@ class Docker_Self():
                         if a.time == ts and a.tag in resource_groups[group_name]:
                             key = (a.tag, a.time, a.ratio, a.z_score)
                             containerAnomalySet.add(key)
-            
-                if len(containerAnomalySet) >= 5:
-                    print(f"Sending alert email for container {container}")
-                    anomalies_list = list(containerAnomalySet)
-                    first_anomalies = anomalies_list[:5]
-                    with open(self.anomaly_dir, 'a') as file:
-                        file.write(container+ "\n")
-                        for a in first_anomalies:   
-                            file.write(f"Metric: {a[0]}, Time: {a[1]}, Ratio: {a[2]}, Z-score: {a[3]}\n")
-                    alertBy_email = Email_Alert(container, self.email_list, self.anomaly_dir)
-                    alertBy_email.send_alert()
-                    with open(self.anomaly_dir, 'w') as file:
-                        file.write("")
-                        file.write("")
-                    alerted_anomalies.add(container)
+
+                z_score = [a[3] for a in containerAnomalySet]
+                if not self.consistency(z_score):
+                    continue
+                anomalyCount = len(containerAnomalySet)
+                state = containerState[container]
+                #if len(containerAnomalySet) >= 5:
+                if state == "Normal":
+                    if anomalyCount >= 3:
+                        containerState[container] = "Concern"
+
+                elif state == "Concern":
+                    if anomalyCount >= 5:
+                        containerState[container] = "Attack"
+                        print(f"Sending alert email for container {container}")
+                        anomalies_list = list(containerAnomalySet)
+                        first_anomalies = anomalies_list[:5]
+                        with open(self.anomaly_dir, 'a') as file:
+                            file.write(container+ "\n")
+                            for a in first_anomalies:   
+                                file.write(f"Metric: {a[0]}, Time: {a[1]}, Ratio: {a[2]}, Z-score: {a[3]}\n")
+                        alertBy_email = Email_Alert(container, self.email_list, self.anomaly_dir)
+                        alertBy_email.send_alert()
+                        with open(self.anomaly_dir, 'w') as file:
+                            file.write("")
+                        cooldown[container] = datetime.now() + timedelta(60)
+                        containerState[container] = "Cool"
+                        #file.write("")
+                    elif state == "Cool":
+                        if datetime.now() >= cooldown.get(container, datetime.now()):
+                            if anomalyCount == 0:
+                                containerState[container] = "Normal"
+                            else:
+                                cooldown[container] = datetime.now() + timedelta(seconds= 60)
+                    #alerted_anomalies.add(container)
             time.sleep(2)
 
 if __name__ == "__main__":
